@@ -51,6 +51,11 @@ Scope: `.kilocode/tools/memory-tools/scripts/` PowerShell tooling invoked by Exe
 - Replace inline `Write-Host` in tool scripts with `Write-StructuredOutput` helper that writes JSON to stdout when called directly, and to the bus when called from phase-runner.
 - `update-heartbeat.ps1`, `update-task-status.ps1`, `consolidate-results.ps1`, `file-scope-guard.ps1`: return structured result objects and suppress console output under `KILO_QUIET`.
 - `phase-runner.ps1` collects structured phase results and prints a single tabular or JSON summary at the end of each phase (or at end-of-run).
+- **Sprint 1B — Batch Memory Operations MVP (Implemented 2026-06-23)**
+  - Added `batch-memory.ps1` supporting `add-task`, `record-decision`, `update-task-status` via `-InputFile` or `-InputJson`.
+  - Wired through `memory-tools.ps1 batch` command.
+  - Exactly one JSON object output when `-Quiet -Json` is used.
+  - Eliminates subprocess fan-out by dot-sourcing `common.ps1` and reusing internal helpers.
 
 ### Phase 3 — MCP Event Bus Migration
 - Convert `Write-Log` from `Write-Host` to `Publish-Event` with `type: log.{level}`.
@@ -98,12 +103,16 @@ Scope: `.kilocode/tools/memory-tools/scripts/` PowerShell tooling invoked by Exe
 | `update-heartbeat.ps1` | ✅ | ✅ | JSON emits `{ ok, operation, task_id }` |
 | `health-check.ps1` | ✅ | ✅ | JSON emits passed/failed result with error array |
 
-#### Remaining Known Noisy Scripts (post-Sprint 1A)
+#### Remaining Known Noisy Scripts (post-Sprint 1B)
 - `parallel-runner.ps1`: emits full plan summary and per-task scope lines.
 - `consolidate-results.ps1`: emits two-phase commit dump and git merge logs.
 - `self-heal.ps1`: emits remediation JSON and warning banners.
 - `phase-runner.ps1`: noisy orchestrator lifecycle output (target for later sprint).
 - `Write-OrchestratorUiStatus` / `Write-OrchestratorUiParallelStatus` in `common.ps1`: UI status lines suppressed in quiet mode but remain loud in interactive mode.
+
+#### Batch Operations Supported (post-Sprint 1B)
+- `batch-memory.ps1`: `add-task`, `record-decision`, `update-task-status` via single `-Quiet -Json` call.
+- `memory-tools.ps1 batch`: passthrough for batch operations.
 
 #### Backward Compatibility Status
 - No breaking changes introduced. Existing invocations without `-Quiet`, `-Json`, or `KILO_QUIET` continue to display human-readable output as before.

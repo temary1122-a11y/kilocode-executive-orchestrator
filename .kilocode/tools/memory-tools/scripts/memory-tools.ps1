@@ -31,6 +31,7 @@ $scriptMap = @{
     "parallel-runner" = "parallel-runner.ps1"
     "self-heal" = "self-heal.ps1"
     "replay-trace" = "replay-trace.ps1"
+    "batch" = "batch-memory.ps1"
 }
 
 if ($scriptMap.ContainsKey($Command)) {

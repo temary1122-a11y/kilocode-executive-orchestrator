@@ -1,6 +1,6 @@
 param(
     [string]$TestRoot = $PSScriptRoot,
-    [string[]]$Pattern = @('happy_path.tests.ps1', 'parallel_worktree.tests.ps1', 'task_deny_recovery.tests.ps1', 'context_enrichment_smoke.tests.ps1', 'add-task.tests.ps1', 'agent-status.tests.ps1', 'consolidate-results.tests.ps1', 'quiet_mode.tests.ps1')
+    [string[]]$Pattern = @('happy_path.tests.ps1', 'parallel_worktree.tests.ps1', 'task_deny_recovery.tests.ps1', 'context_enrichment_smoke.tests.ps1', 'add-task.tests.ps1', 'agent-status.tests.ps1', 'consolidate-results.tests.ps1', 'quiet_mode.tests.ps1', 'batch_memory.tests.ps1')
 )
 
 $ErrorActionPreference = 'SilentlyContinue'
