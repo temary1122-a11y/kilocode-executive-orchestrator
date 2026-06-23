@@ -3,11 +3,7 @@
 Pester tests for parallel fallback: two roles produce isolated manifests.
 #>
 
-$script:TestsRoot = $PSScriptRoot
-$script:MemoryToolsRoot = Split-Path -Parent $script:TestsRoot
-$script:ToolsRoot = Split-Path -Parent $script:MemoryToolsRoot
-$script:KiloRoot = Split-Path -Parent $script:ToolsRoot
-$script:DelegateScript = Join-Path $script:KiloRoot 'delegation\kilo-sdk-delegate.js'
+$script:KiloRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 
 $script:TestRoot = "C:\Temp\kilo-pester-parallel"
 if (-not (Test-Path $script:TestRoot)) { New-Item -ItemType Directory -Path $script:TestRoot -Force | Out-Null }
@@ -25,7 +21,7 @@ function Invoke-FallbackStub {
     param([string]$PayloadPath)
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = 'node'
-    $psi.Arguments = "`"$script:DelegateScript`" `"$PayloadPath`""
+    $psi.Arguments = "`"$($script:KiloRoot)\delegation\kilo-sdk-delegate.js`" `"$PayloadPath`""
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
     $psi.UseShellExecute = $false

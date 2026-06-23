@@ -67,6 +67,30 @@ function Get-ResearchReportsPath { return $script:ResearchReportsPath }
 function Get-UserProfilePath { return $script:UserProfilePath }
 function Get-ExecutionTracesPath { return $script:ExecutionTracesPath }
 
+function Test-QuietMode {
+    param([switch]$Quiet)
+    return ($Quiet -or $env:KILO_QUIET -eq '1' -or $env:KILO_QUIET -eq 'true')
+}
+
+function Write-QuietAwareHost {
+    param(
+        [string]$Message,
+        [switch]$Quiet,
+        [string]$ForegroundColor = 'Gray'
+    )
+    if (-not (Test-QuietMode -Quiet:$Quiet)) {
+        Write-Host $Message -ForegroundColor $ForegroundColor
+    }
+}
+
+function Write-JsonResult {
+    param(
+        [object]$Data,
+        [int]$Depth = 20
+    )
+    $Data | ConvertTo-Json -Compress -Depth $Depth
+}
+
 function Ensure-MemoryDirectories {
     foreach ($path in @(
         $script:MemoryPath,
@@ -772,7 +796,8 @@ function Write-Log {
     param(
         [Parameter(Mandatory=$true)][string]$Message,
         [ValidateSet('DEBUG','INFO','WARN','ERROR')][string]$Level = 'INFO',
-        [string]$Component = 'memory-tools'
+        [string]$Component = 'memory-tools',
+        [switch]$Quiet
     )
     $timestamp = Get-Date -Format 'o'
     $color = switch ($Level) {
@@ -782,7 +807,9 @@ function Write-Log {
         'ERROR' { 'Red' }
     }
 
-    Write-Host "$timestamp [$Level] [$Component] $Message" -ForegroundColor $color
+    if (-not (Test-QuietMode -Quiet:$Quiet)) {
+        Write-Host "$timestamp [$Level] [$Component] $Message" -ForegroundColor $color
+    }
 }
 
 # Read JSONL file into array of objects

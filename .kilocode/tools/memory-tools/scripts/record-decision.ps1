@@ -11,10 +11,23 @@ param(
     [Parameter(Mandatory=$true)][string]$Choice,
     [Parameter(Mandatory=$true)][string]$Rationale,
     [string]$Task,
-    [string[]]$Artifacts
+    [string[]]$Artifacts,
+    [switch]$Quiet,
+    [switch]$Json,
+    [switch]$NoProgress
 )
 
 . "$PSScriptRoot\common.ps1"
+
+function Write-FailureResult {
+    param([string]$Message, [string]$Operation = "record-decision")
+    if ($Json) {
+        Write-JsonResult -Data ([ordered]@{ ok = $false; error = $Message; operation = $Operation })
+    } else {
+        Write-Error $Message
+    }
+    exit 1
+}
 $decisionsMdPath = $script:DecisionsMdPath
 $decisionsJsonlPath = $script:DecisionsJsonlPath
 
@@ -62,7 +75,9 @@ if ($Artifacts) {
 $decision = ("`n" + ($sections -join $lineSeparator)) + $lineSeparator
 
 Add-Content -Path $decisionsMdPath -Value $decision
-Write-Host 'Decision recorded to decisions.md' -ForegroundColor Green
+if (-not $Json) {
+    Write-QuietAwareHost -Message 'Decision recorded to decisions.md' -ForegroundColor Green -Quiet:($Quiet -or $Json)
+}
 
 # Append to JSONL
 $record = [ordered]@{
@@ -76,7 +91,7 @@ $record = [ordered]@{
     artifacts   = $Artifacts
 }
 $record | ConvertTo-Json -Compress | Add-Content -Path $decisionsJsonlPath
-Write-Host 'Decision recorded to decisions.jsonl' -ForegroundColor Cyan
+
 
 Sync-SystemStateFromTasks
 
@@ -85,6 +100,15 @@ if ($Task) {
         topic = $Topic
         choice = $Choice
     } | Out-Null
+}
+
+if ($Json) {
+    $decisionId = $record.id
+    Write-JsonResult -Data ([ordered]@{
+        ok = $true
+        operation = "record-decision"
+        id = $decisionId
+    })
 }
 
 exit 0

@@ -6,6 +6,12 @@ Verifies that required directories and files exist and that JSONL files are vali
 Outputs a summary and exits with code 0 on success, 1 on failure.
 #>
 
+param(
+    [switch]$Quiet,
+    [switch]$Json,
+    [switch]$NoProgress
+)
+
 . "$PSScriptRoot\common.ps1"
 
 $memoryPath = Get-MemoryPath
@@ -62,12 +68,28 @@ if ($allOk) {
 }
 
 if ($allOk) { 
-    Write-Log 'Health check passed - all components healthy' -Level 'INFO'
+    Write-Log 'Health check passed - all components healthy' -Level 'INFO' -Quiet:($Quiet -or $Json)
     Write-ExecutionTrace -TaskId 'system' -Phase 'health-check' -Status 'passed' -Data @{} -Event 'health-check.passed' -Actor 'health-check' | Out-Null
+    if ($Json) {
+        Write-JsonResult -Data ([ordered]@{
+            ok = $true
+            operation = "health-check"
+            status = "passed"
+        })
+    }
     exit 0 
-} else { 
-    $errors | ForEach-Object { Write-Log $_ -Level 'ERROR' }
-    Write-Log 'Health check failed - resolve errors above' -Level 'ERROR'
+} else {
+    if ($Json) {
+        Write-JsonResult -Data ([ordered]@{
+            ok = $false
+            operation = "health-check"
+            status = "failed"
+            errors = $errors
+        })
+    } else {
+        $errors | ForEach-Object { Write-Log $_ -Level 'ERROR' -Quiet:($Quiet -or $Json) }
+        Write-Log 'Health check failed - resolve errors above' -Level 'ERROR' -Quiet:($Quiet -or $Json)
+    }
     Write-ExecutionTrace -TaskId 'system' -Phase 'health-check' -Status 'failed' -Data @{ errors = $errors } -Event 'health-check.failed' -Actor 'health-check' -FailureMode 'health_check_failure' | Out-Null
-    exit 1 
+    exit 1
 }

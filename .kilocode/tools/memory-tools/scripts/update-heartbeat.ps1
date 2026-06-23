@@ -10,7 +10,10 @@ Optional short status message.
 #>
 param(
     [Parameter(Mandatory=$true)][string]$TaskId,
-    [string]$StatusMessage = "running"
+    [string]$StatusMessage = "running",
+    [switch]$Quiet,
+    [switch]$Json,
+    [switch]$NoProgress
 )
 
 . "$PSScriptRoot\common.ps1"
@@ -35,5 +38,13 @@ $tempFile = "$pulseFile.tmp"
 $pulseData | ConvertTo-Json -Compress | Set-Content -LiteralPath $tempFile -Encoding UTF8
 Move-Item -Path $tempFile -Destination $pulseFile -Force
 
-Write-Host "Heartbeat updated for $TaskId" -ForegroundColor DarkGray
+if ($Json) {
+    Write-JsonResult -Data ([ordered]@{
+        ok = $true
+        operation = "update-heartbeat"
+        task_id = $TaskId
+    })
+    exit 0
+}
+Write-QuietAwareHost -Message "Heartbeat updated for $TaskId" -ForegroundColor DarkGray -Quiet:($Quiet -or $Json)
 exit 0

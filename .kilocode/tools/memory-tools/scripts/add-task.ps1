@@ -22,19 +22,33 @@ param(
     [string]$ParallelGroup = "",
     [int]$MaxAgents = 4,
     [string]$DependsOn = "",
-    [ValidateSet("low", "medium", "high")][string]$EstimatedComplexity = "medium"
+    [ValidateSet("low", "medium", "high")][string]$EstimatedComplexity = "medium",
+    [switch]$Quiet,
+    [switch]$Json,
+    [switch]$NoProgress
 )
+
+# Use common.ps1 path functions
+. "$PSScriptRoot\common.ps1"
+
+function Write-FailureResult {
+    param([string]$Message)
+    if ($Json) {
+        Write-JsonResult -Data ([ordered]@{ ok = $false; error = $Message })
+    } else {
+        Write-Error $Message
+    }
+    exit 1
+}
 
 # Validate Type
 if ($Type -notin @("research", "coding", "verification", "memory")) {
-    Write-Error "Type must be: research, coding, verification, or memory"
-    exit 1
+    Write-FailureResult -Message "Type must be: research, coding, verification, or memory"
 }
 
 # Validate Priority
 if ($Priority -notin @("p0", "p1", "p2")) {
-    Write-Error "Priority must be: p0, p1, or p2"
-    exit 1
+    Write-FailureResult -Message "Priority must be: p0, p1, or p2"
 }
 
 $timestamp = Get-Date -Format "yyyyMMddHHmmss"
@@ -67,7 +81,8 @@ if ($DependsOn) {
     # Try JSON array format first
     if ($DependsOn -match "^\[") {
         try {
-            $dependsOnArray = ($DependsOn | ConvertFrom-Json)
+            $inner = $DependsOn.TrimStart('[').TrimEnd(']')
+            $dependsOnArray = $inner -split '","' | ForEach-Object { $_.Trim('"') } | Where-Object { $_ }
         } catch {
             Write-Log "Invalid DependsOn JSON: $_" -Level 'WARN'
         }
@@ -80,8 +95,6 @@ if ($DependsOn) {
     $taskRecord.depends_on = @()
 }
 
-# Use common.ps1 path functions
-. "$PSScriptRoot\common.ps1"
 $tasksPath = Get-TasksPath
 
 # Ensure directory exists
@@ -98,10 +111,16 @@ try {
     Safe-AppendToFile -Path $tasksPath -Content $jsonLine
     Publish-Event -Type 'task.created' -Data @{ task_id = $taskId; depends_on = @($taskRecord.depends_on); parallel_group = $ParallelGroup }
 } catch {
-    Write-Error "Generated invalid JSON or failed to write tasks.jsonl: $_"
-    exit 1
+    Write-FailureResult -Message "Generated invalid JSON or failed to write tasks.jsonl: $_"
 }
 
-Write-Host "Task $taskId added successfully" -ForegroundColor Green
-
+if ($Json) {
+    Write-JsonResult -Data ([ordered]@{
+        ok = $true
+        operation = "add-task"
+        task_id = $taskId
+    })
+    exit 0
+}
+Write-QuietAwareHost -Message "Task $taskId added successfully" -ForegroundColor Green -Quiet:($Quiet -or $Json)
 exit 0

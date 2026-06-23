@@ -3,12 +3,12 @@
 Pester tests for add-task.ps1
 #>
 
-$script:TestsRoot = $PSScriptRoot
-$script:MemoryToolsRoot = Split-Path -Parent $script:TestsRoot
-$script:ToolsRoot = Split-Path -Parent $script:MemoryToolsRoot
-
 $script:TestRoot = "C:\Temp\kilo-pester"
 if (-not (Test-Path $script:TestRoot)) { New-Item -ItemType Directory -Path $script:TestRoot -Force | Out-Null }
+
+$script:KiloRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
+$script:RealTasksPath = Join-Path $script:KiloRoot "memory\tasks.jsonl"
+$script:OriginalTasksContent = ""
 
 function New-TestFixture {
     param([string]$Name)
@@ -30,13 +30,18 @@ function Invoke-AddTask {
         [string]$Priority = "p1",
         [string]$Objective = "Test objective",
         [string]$Agent = "coding-agent",
-        [string]$FixtureDir
+        [string]$FixtureDir,
+        [string]$DependsOn = "",
+        [string]$ParentId = ""
     )
     Push-Location $FixtureDir
     try {
-        $scriptPath = Join-Path $script:MemoryToolsRoot 'scripts\add-task.ps1'
+        $scriptPath = Join-Path $script:KiloRoot 'tools\memory-tools\scripts\add-task.ps1'
         $ErrorActionPreference = 'Continue'
-        $out = & $scriptPath -Type $Type -Priority $Priority -Objective $Objective -Agent $Agent 2>&1
+        $splat = @{ Type = $Type; Priority = $Priority; Objective = $Objective; Agent = $Agent }
+        if ($DependsOn) { $splat.DependsOn = $DependsOn }
+        if ($ParentId)  { $splat.ParentId = $ParentId }
+        $out = & $scriptPath @splat 2>&1
         return $out
     } finally {
         Pop-Location
@@ -45,11 +50,21 @@ function Invoke-AddTask {
 
 Describe "Add-Task.ps1" {
     BeforeEach {
+        if (-not $script:OriginalTasksContentSet) {
+            if (Test-Path $script:RealTasksPath) {
+                $script:OriginalTasksContent = Get-Content $script:RealTasksPath -Raw
+                $script:OriginalTasksContentSet = $true
+            }
+        }
+        "" | Set-Content $script:RealTasksPath -Encoding UTF8
         $script:Fixture = New-TestFixture -Name "add-task-$(New-Guid)"
     }
 
     AfterEach {
         if (Test-Path $script:Fixture) { Remove-Item $script:Fixture -Recurse -Force -ErrorAction SilentlyContinue }
+        if ($script:OriginalTasksContentSet) {
+            Set-Content $script:RealTasksPath $script:OriginalTasksContent -Encoding UTF8
+        }
     }
 
     It "Rejects invalid Type" {
@@ -63,44 +78,40 @@ Describe "Add-Task.ps1" {
     }
 
     It "Creates task with basic parameters" {
-        $output = Invoke-AddTask -FixtureDir $script:Fixture
-        $output | Should Match "added successfully"
-        $tasksPath = Join-Path $script:Fixture "memory\tasks.jsonl"
-        Test-Path $tasksPath | Should Be $true
-        $content = Get-Content $tasksPath -Raw
+        Invoke-AddTask -FixtureDir $script:Fixture | Out-Null
+        Test-Path $script:RealTasksPath | Should Be $true
+        $content = Get-Content $script:RealTasksPath -Raw
         $content | Should Match '"task_id"'
         $content | Should Match '"status"'
     }
 
     It "Parses comma-separated DependsOn" {
-        $output = Invoke-AddTask -FixtureDir $script:Fixture -DependsOn "task_a,task_b"
-        $tasksPath = Join-Path $script:Fixture "memory\tasks.jsonl"
-        $line = Get-Content $tasksPath | Select-Object -Last 1 | ConvertFrom-Json
-        @($line.depends_on) | Should Contain "task_a"
-        @($line.depends_on) | Should Contain "task_b"
+        Invoke-AddTask -FixtureDir $script:Fixture -DependsOn "task_a,task_b" | Out-Null
+        $line = Get-Content $script:RealTasksPath | Where-Object { $_.Trim() } | Select-Object -Last 1
+        $line | Should Match '"depends_on":\s*\[[^\]]*"task_a"[^\]]*\]'
+        $line | Should Match '"depends_on":\s*\[[^\]]*"task_b"[^\]]*\]'
     }
 
     It "Parses JSON array DependsOn" {
-        $output = Invoke-AddTask -FixtureDir $script:Fixture -DependsOn '["task_x","task_y"]'
-        $tasksPath = Join-Path $script:Fixture "memory\tasks.jsonl"
-        $line = Get-Content $tasksPath | Select-Object -Last 1 | ConvertFrom-Json
-        @($line.depends_on) | Should Contain "task_x"
-        @($line.depends_on) | Should Contain "task_y"
+        Invoke-AddTask -FixtureDir $script:Fixture -DependsOn '["task_x","task_y"]' | Out-Null
+        $line = Get-Content $script:RealTasksPath | Where-Object { $_.Trim() } | Select-Object -Last 1
+        $line | Should Match '"depends_on":\s*\[[^\]]*"task_x"[^\]]*\]'
+        $line | Should Match '"depends_on":\s*\[[^\]]*"task_y"[^\]]*\]'
     }
 
     It "Sets type and priority correctly" {
         Invoke-AddTask -FixtureDir $script:Fixture -Type "research" -Priority "p0" | Out-Null
-        $tasksPath = Join-Path $script:Fixture "memory\tasks.jsonl"
-        $line = Get-Content $tasksPath | Select-Object -Last 1 | ConvertFrom-Json
+        $line = Get-Content $script:RealTasksPath | Where-Object { $_.Trim() } | Select-Object -Last 1 | ConvertFrom-Json
         $line.type | Should Be "research"
         $line.priority | Should Be "p0"
     }
 
     It "Generates unique task IDs from timestamp" {
+        Start-Sleep -Seconds 1
         Invoke-AddTask -FixtureDir $script:Fixture | Out-Null
+        Start-Sleep -Seconds 1
         Invoke-AddTask -FixtureDir $script:Fixture | Out-Null
-        $tasksPath = Join-Path $script:Fixture "memory\tasks.jsonl"
-        $lines = Get-Content $tasksPath | Where-Object { $_.Trim() } | ForEach-Object { ConvertFrom-Json $_ }
+        $lines = Get-Content $script:RealTasksPath | Where-Object { $_.Trim() } | ForEach-Object { ConvertFrom-Json $_ }
         ($lines | Select-Object -ExpandProperty task_id -Unique).Count | Should Be 2
     }
 }

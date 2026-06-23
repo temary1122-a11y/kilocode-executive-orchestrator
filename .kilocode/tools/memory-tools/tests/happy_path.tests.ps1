@@ -1,10 +1,4 @@
-$script:TestsRoot = $PSScriptRoot
-$script:MemoryToolsRoot = Split-Path -Parent $script:TestsRoot
-$script:ToolsRoot = Split-Path -Parent $script:MemoryToolsRoot
-$script:KiloRoot = Split-Path -Parent $script:ToolsRoot
-$script:CommonScript = Join-Path $script:KiloRoot 'tools\memory-tools\scripts\common.ps1'
-$script:DelegateScript = Join-Path $script:KiloRoot 'delegation\kilo-sdk-delegate.js'
-$script:ModeFile = Join-Path $script:KiloRoot 'modes\executive-orchestrator.md'
+$script:KiloRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 
 $script:TestRoot = "C:\Temp\kilo-pester-happy"
 if (-not (Test-Path $script:TestRoot)) { New-Item -ItemType Directory -Path $script:TestRoot -Force | Out-Null }
@@ -29,12 +23,13 @@ Describe "Happy Path: Delegation Fallback" {
     }
 
     It "Loads common.ps1 without errors" {
-        { . $script:CommonScript } | Should Not Throw
+        { . (Join-Path $script:KiloRoot 'tools\memory-tools\scripts\common.ps1') } | Should Not Throw
     }
 
     It "Returns default allow policy when no explicit policy is set" {
-        . $script:CommonScript
-        $content = Get-Content $script:ModeFile -Raw
+        . (Join-Path $script:KiloRoot 'tools\memory-tools\scripts\common.ps1')
+        $modePath = Join-Path $script:KiloRoot 'modes\executive-orchestrator.md'
+        $content = Get-Content $modePath -Raw
         $match = [regex]::Match($content, 'task:\s*(allow|deny)')
         $match.Success | Should Be $true
         $match.Groups[1].Value | Should Be 'allow'
@@ -55,8 +50,8 @@ Describe "Happy Path: Delegation Fallback" {
         $stdoutPath = Join-Path $script:Fixture 'stub_stdout.txt'
         $stderrPath = Join-Path $script:Fixture 'stub_stderr.txt'
         $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = 'node'
-        $psi.Arguments = "`"$script:DelegateScript`" `"$payloadPath`""
+        $sdkScript = Join-Path $script:KiloRoot 'delegation\kilo-sdk-delegate.js'
+        $psi.Arguments = "`"$sdkScript`" `"$payloadPath`""
         $psi.RedirectStandardOutput = $true
         $psi.RedirectStandardError = $true
         $psi.UseShellExecute = $false
@@ -90,7 +85,8 @@ Describe "Happy Path: Delegation Fallback" {
         $stdoutPath = Join-Path $script:Fixture 'stub_stdout2.txt'
         $psi = New-Object System.Diagnostics.ProcessStartInfo
         $psi.FileName = 'node'
-        $psi.Arguments = "`"$script:DelegateScript`" `"$payloadPath`""
+        $sdkScript = Join-Path $script:KiloRoot 'delegation\kilo-sdk-delegate.js'
+        $psi.Arguments = "`"$sdkScript`" `"$payloadPath`""
         $psi.RedirectStandardOutput = $true
         $psi.RedirectStandardError = $true
         $psi.UseShellExecute = $false
@@ -115,7 +111,7 @@ Describe "Happy Path: Delegation Fallback" {
     }
 
     It "Publish-Event and Get-BusEvents work end-to-end" {
-        . $script:CommonScript
+        . (Join-Path $script:KiloRoot 'tools\memory-tools\scripts\common.ps1')
         Publish-Event -Type 'agent.heartbeat' -Data @{ session_id = 'test_happy_e2e' }
         $events = @(Get-BusEvents)
         $events | Should Not Be $null

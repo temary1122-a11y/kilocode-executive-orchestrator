@@ -3,15 +3,6 @@
 Smoke test for context-enrichment.ps1: parse/load + minimal generated output.
 #>
 
-$script:TestsRoot = $PSScriptRoot
-$script:MemoryToolsRoot = Split-Path -Parent $script:TestsRoot
-$script:ToolsRoot = Split-Path -Parent $script:MemoryToolsRoot
-$script:KiloRoot = Split-Path -Parent $script:ToolsRoot
-
-$script:RealTasksPath = Join-Path $script:KiloRoot 'memory\tasks.jsonl'
-$script:RealContextPath = Join-Path $script:KiloRoot 'memory\context-enrichment'
-$script:ScriptPath = Join-Path $script:MemoryToolsRoot 'scripts\context-enrichment.ps1'
-
 $script:TestRoot = "C:\Temp\kilo-pester-context"
 if (-not (Test-Path $script:TestRoot)) { New-Item -ItemType Directory -Path $script:TestRoot -Force | Out-Null }
 
@@ -22,6 +13,11 @@ function New-TestFixture {
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
     return $dir
 }
+
+$script:KiloRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
+$script:RealTasksPath = Join-Path $script:KiloRoot 'memory\tasks.jsonl'
+$script:RealContextPath = Join-Path $script:KiloRoot 'memory\context-enrichment'
+$script:ScriptPath = Join-Path $script:KiloRoot 'tools\memory-tools\scripts\context-enrichment.ps1'
 
 function Add-TestTaskToTasksFile {
     param([string]$TaskId)

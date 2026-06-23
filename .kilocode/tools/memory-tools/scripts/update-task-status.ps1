@@ -10,12 +10,26 @@ Updates task status and records a lightweight user-model completion pattern when
 param(
     [Parameter(Mandatory=$true)][string]$TaskId,
     [Parameter(Mandatory=$true)][string]$Status,
-    [string]$CompletedAt
+    [string]$CompletedAt,
+    [switch]$Quiet,
+    [switch]$Json,
+    [switch]$NoProgress
 )
 
-if ($Status -notin @('pending', 'in_progress', 'completed', 'failed', 'blocked')) {
-    Write-Error 'Status must be: pending, in_progress, completed, failed, or blocked'
+. "$PSScriptRoot\common.ps1"
+
+function Write-FailureResult {
+    param([string]$Message)
+    if ($Json) {
+        Write-JsonResult -Data ([ordered]@{ ok = $false; error = $Message })
+    } else {
+        Write-Error $Message
+    }
     exit 1
+}
+
+if ($Status -notin @('pending', 'in_progress', 'completed', 'failed', 'blocked')) {
+    Write-FailureResult -Message 'Status must be: pending, in_progress, completed, failed, or blocked'
 }
 
 # Support last/current for TaskId
@@ -25,12 +39,10 @@ if ($TaskId -eq 'last') {
     $TaskId = & "$PSScriptRoot\get-current-task.ps1"
 }
 
-. "$PSScriptRoot\common.ps1"
 $tasksPath = Get-TasksPath
 
 if (-not (Test-Path $tasksPath)) {
-    Write-Error "Tasks file not found: $tasksPath"
-    exit 1
+    Write-FailureResult -Message "Tasks file not found: $tasksPath"
 }
 
 $script:updated = $false
@@ -59,8 +71,7 @@ $null = Lock-AndUpdateJsonl -Path $tasksPath -UpdateAction {
 }
 
 if (-not $script:updated) {
-    Write-Error "Task $TaskId not found"
-    exit 1
+    Write-FailureResult -Message "Task $TaskId not found"
 }
 
 Sync-SystemStateFromTasks
@@ -75,7 +86,7 @@ if ($Status -eq 'completed') {
             -Agent $updatedTask.assigned_agent `
             -Objective $updatedTask.objective | Out-Null
     } catch {
-        Write-Log "Failed to update user profile after task completion: $_" -Level 'WARN' -Component 'update-task-status'
+        Write-Log "Failed to update user profile after task completion: $_" -Level 'WARN' -Component 'update-task-status' -Quiet:($Quiet -or $Json)
     }
     Write-ExecutionTrace -TaskId $TaskId -Phase 'task-status' -Status 'completed' -Data @{
         completed_at = if ($CompletedAt) { $CompletedAt } else { (Get-Date).ToString('o') }
@@ -88,5 +99,14 @@ if ($Status -eq 'completed') {
     } | Out-Null
 }
 
-Write-Host "Task $TaskId status updated to $Status" -ForegroundColor Green
+if ($Json) {
+    Write-JsonResult -Data ([ordered]@{
+        ok = $true
+        operation = "update-task-status"
+        task_id = $TaskId
+        status = $Status
+    })
+    exit 0
+}
+Write-QuietAwareHost -Message "Task $TaskId status updated to $Status" -ForegroundColor Green -Quiet:($Quiet -or $Json)
 exit 0

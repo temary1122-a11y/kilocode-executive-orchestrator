@@ -34,13 +34,8 @@ param(
 
 # Determine which common.ps1 to use
 $localCommon = Join-Path $PSScriptRoot 'common.ps1'
-$globalCommon = if ($env:KILO_BASE) {
-    Join-Path $env:KILO_BASE 'tools\memory-tools\scripts\common.ps1'
-} elseif ($env:USERPROFILE) {
-    Join-Path $env:USERPROFILE '.config\kilo\tools\memory-tools\scripts\common.ps1'
-} else {
-    ''
-}
+$globalBase = Join-Path $env:USERPROFILE '.config\kilo'
+$globalCommon = Join-Path $globalBase 'tools\memory-tools\scripts\common.ps1'
 $commonPath = if (Test-Path $localCommon) { $localCommon } else { $globalCommon }
 
 . $commonPath
@@ -497,7 +492,7 @@ if ($Apply) {
         apply_status      = 'ready'
     }
     $stateObj | ConvertTo-Json -Depth 5 | Set-Content -Path $selfHealStatePath -Encoding UTF8
-    & "$PSScriptRoot\user-profile.ps1" -Action record-task-completion -TaskId ($TaskId if ($TaskId) { $TaskId } else { 'self-heal' }) -TaskType 'self_heal' -Priority 'medium' -Agent $Agent -Objective 'Self-healing applied' | Out-Null
+    & "$PSScriptRoot\user-profile.ps1" -Action record-task-completion -TaskId $(if ($TaskId) { $TaskId } else { 'self-heal' }) -TaskType 'self_heal' -Priority 'medium' -Agent $Agent -Objective 'Self-healing applied' | Out-Null
     Update-SystemState -Key 'last_self_heal' -Value [ordered]@{
         agent = $Agent
         task_id = $TaskId

@@ -3,11 +3,7 @@
 Pester tests for delegation policy: default=allow, explicit deny, env override.
 #>
 
-$script:TestsRoot = $PSScriptRoot
-$script:MemoryToolsRoot = Split-Path -Parent $script:TestsRoot
-$script:ToolsRoot = Split-Path -Parent $script:MemoryToolsRoot
-$script:KiloRoot = Split-Path -Parent $script:ToolsRoot
-$script:ModeFile = Join-Path $script:KiloRoot 'modes\executive-orchestrator.md'
+$script:KiloRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 
 $script:TestRoot = "C:\Temp\kilo-pester-deny"
 if (-not (Test-Path $script:TestRoot)) { New-Item -ItemType Directory -Path $script:TestRoot -Force | Out-Null }
@@ -82,7 +78,7 @@ Describe "Delegation Policy: Default Allow" {
     }
 
     It "Executive orchestrator mode file has task: allow as active policy" {
-        $content = Get-Content -LiteralPath $script:ModeFile -Raw
+        $content = Get-Content -LiteralPath (Join-Path $script:KiloRoot 'modes\executive-orchestrator.md') -Raw
         $result = Get-PolicyFromModeContent -Content $content -EnvPolicy ''
         $result.allowed | Should Be $true
         $result.reason | Should Be 'mode:allow'
