@@ -1,0 +1,111 @@
+# Git ignore for Kilo Executive Orchestrator v0.9.0-beta
+# Runtime memory and generated artifacts — never commit these
+
+# ---- Root scratch/debug ----
+backup-*.ps1
+both-test.ps1
+byte-*.ps1
+check-bom.ps1
+compare-*.ps1
+diff-*.ps1
+dotsource-*.ps1
+exact-bytes.ps1
+final-backup-test.ps1
+inspect-*.ps1
+parse-test.ps1
+parser-vs-dotsource.ps1
+restore-check.ps1
+retest-backup.ps1
+run-add-task-tests.ps1
+show-diff.ps1
+triple-test-backup.ps1
+verify-common*.ps1
+wide-diff.ps1
+test-tasks.json
+audit-tracked-files.txt
+
+# ---- Root generated reports ----
+coding_result.yaml
+deep_practices_report.yaml
+audit-results.yaml
+*.audit.yaml
+*_report.yaml
+*_result.yaml
+
+# ---- .kilo/ (local/optional config, not part of public beta package) ----
+.kilo/
+
+# ---- Runtime memory / history ----
+.kilocode/memory/bus/events.jsonl
+.kilocode/memory/delegation/pending/*.json
+.kilocode/memory/context-enrichment/test_context_*.md
+.kilocode/memory/execution-traces/
+.kilocode/memory/**/*.tmp
+.kilocode/memory/**/*.log
+
+# Keep empty runtime directories with .gitkeep
+!.kilocode/memory/bus/.gitkeep
+!.kilocode/memory/checkpoints/.gitkeep
+!.kilocode/memory/context-enrichment/.gitkeep
+!.kilocode/memory/delegation/pending/.gitkeep
+!.kilocode/memory/execution-traces/.gitkeep
+!.kilocode/memory/plans/.gitkeep
+!.kilocode/memory/research-reports/.gitkeep
+
+.kilocode/memory/checkpoints/**
+.kilocode/memory/context-enrichment/**
+.kilocode/memory/plans/**
+.kilocode/memory/research-reports/**
+
+.kilocode/memory/decisions.jsonl
+.kilocode/memory/decisions.md
+.kilocode/memory/state.json
+.kilocode/memory/tasks.jsonl
+.kilocode/memory/user-profile.jsonl
+.kilocode/task_history.json
+
+# ---- Local scratch / debug artifacts at repo root ----
+test-*.ps1
+debug-*.ps1
+fix-common*.ps1
+isolate-we*.ps1
+p03-*.ps1
+p04-*.ps1
+patch_*.py
+fix-common-python*.py
+report-p*.md
+archive.zip
+run-single-test.ps1
+run-pester.ps1
+log-decision.ps1
+
+# ---- GitHub MCP secret tokens (never commit) ----
+*github_mcp_setup.json
+
+# ---- Task runtime artifacts (transient API payloads) ----
+.kilocode/tasks/*/raw_api_payload_*.json
+.kilocode/tasks/*/api_conversation_history.json
+.kilocode/tasks/*/ui_messages.json
+.kilocode/tasks/*/task_metadata.json
+
+# ---- Corrupted config artifacts ----
+.kilocode/agent-manager.json.*
+
+# ---- Obsolete MCP configs / example stubs ----
+.kilocode/mcp.json
+.kilocode/mcp/
+
+# ---- Old installer ----
+.kilocode/install.ps1
+
+# ---- Runtime plans and MVP artifacts ----
+.kilocode/plans/**
+.kilocode/*-plan.md
+.kilocode/MVP-PLAN.md
+.kilocode/official_plan.md
+
+# ---- Backup/temp edits inside project scripts ----
+.kilocode/tools/memory-tools/scripts/*.bak
+.kilocode/tools/memory-tools/scripts/*.new
+.kilocode/tools/memory-tools/scripts/*.tempcheck
+.kilocode/tools/memory-tools/scripts/kilo-sdk-delegate.js
