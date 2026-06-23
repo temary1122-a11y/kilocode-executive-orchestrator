@@ -81,10 +81,10 @@ if ($DependsOn) {
     # Try JSON array format first
     if ($DependsOn -match "^\[") {
         try {
-            $inner = $DependsOn.TrimStart('[').TrimEnd(']')
-            $dependsOnArray = $inner -split '","' | ForEach-Object { $_.Trim('"') } | Where-Object { $_ }
+            $dependsOnArray = @($DependsOn | ConvertFrom-Json)
         } catch {
             Write-Log "Invalid DependsOn JSON: $_" -Level 'WARN'
+            $dependsOnArray = @()
         }
     } else {
         # Treat as comma-separated list
