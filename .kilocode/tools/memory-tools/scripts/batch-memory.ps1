@@ -1,25 +1,20 @@
 <#
 .SYNOPSIS
-Batch memory operations - executes multiple add-task, record-decision, update-task-status in one call
-.PARAMETER InputFile
-Path to JSON file containing array of operations
-.PARAMETER InputJson
-JSON string containing array of operations
-.PARAMETER Quiet
-Suppress human-readable output
-.PARAMETER Json
-Output structured JSON result
-.PARAMETER NoProgress
-Suppress progress indicators
-.PARAMETER ContinueOnError
-Continue processing after first failure
+Batch memory operations - executes multiple add-task, record-decision, update-task-status in one call.
+.PARAMETER Operations
+JSON string representing an array of operations. Each operation object must have:
+  - type: add-task | update-task-status | record-decision
+  - For add-task: task_type, priority, objective, agent (and optional: parent_id, parallel_group, max_agents, depends_on, estimated_complexity)
+  - For update-task-status: task_id, status (and optional: agent, note, progress)
+  - For record-decision: topic, choice (and optional: problem, rationale, task_id, agent, status)
+.EXAMPLE
+.\batch-memory.ps1 '[{"type":"add-task","task_type":"coding","priority":"p1","objective":"Test task","agent":"coding-agent"}]'
 #>
 param(
-    [string]$InputFile = "",
-    [string]$InputJson = "",
+    [Parameter(Mandatory=$true, Position=0)]
+    [string]$Operations,
     [switch]$Quiet,
     [switch]$Json,
-    [switch]$NoProgress,
     [switch]$ContinueOnError
 )
 
@@ -43,279 +38,170 @@ function Write-FailureResult {
     exit 1
 }
 
-function Invoke-BatchAddTask {
+function Convert-ToSwitchValue {
+    param($Value)
+    if ($Value -is [bool]) { return $Value }
+    if ($Value -is [int]) { return $Value }
+    if ($Value -is [string]) { return $Value }
+    return $Value
+}
+
+function Invoke-BatchOperation {
     param([Parameter(Mandatory=$true)][object]$Op)
 
-    $type = $Op.type
-    $priority = $Op.priority
-    $objective = $Op.objective
-    $agent = $Op.agent
-    $parentId = $Op.parent_id
-    $parallelGroup = $Op.parallel_group
-    $maxAgents = $Op.max_agents
-    $dependsOn = $Op.depends_on
-    $estimatedComplexity = $Op.estimated_complexity
+    $opType = $Op.type
 
-    if (-not $type -or -not $priority -or -not $objective -or -not $agent) {
-        return [ordered]@{ ok = $false; error = "add-task requires type, priority, objective, agent" }
+    if (-not $opType) {
+        return [ordered]@{ ok = $false; error = "Operation type is required" }
     }
 
-    if ($type -notin @("research", "coding", "verification", "memory")) {
-        return [ordered]@{ ok = $false; error = "Type must be: research, coding, verification, or memory" }
-    }
+    $arguments = @()
 
-    if ($priority -notin @("p0", "p1", "p2")) {
-        return [ordered]@{ ok = $false; error = "Priority must be: p0, p1, or p2" }
-    }
+    switch ($opType) {
+        "add-task" {
+            $taskType = $Op.task_type
+            $priority = $Op.priority
+            $objective = $Op.objective
+            $agent = $Op.agent
+            $parentId = $Op.parent_id
+            $parallelGroup = $Op.parallel_group
+            $maxAgents = $Op.max_agents
+            $dependsOn = $Op.depends_on
+            $estimatedComplexity = $Op.estimated_complexity
 
-    if (-not $estimatedComplexity) { $estimatedComplexity = "medium" }
-
-    $timestamp = Get-Date -Format "yyyyMMddHHmmss"
-    $taskId = "task_$timestamp"
-    $isoTime = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
-
-    $taskRecord = [ordered]@{
-        task_id = $taskId
-        type = $type
-        priority = $priority
-        status = "pending"
-        created_at = $isoTime
-        assigned_agent = $agent
-        objective = $objective
-        estimated_complexity = $estimatedComplexity
-    }
-
-    if ($parentId) {
-        $taskRecord.parent_id = $parentId
-    }
-
-    if ($parallelGroup) {
-        $taskRecord.parallel_group = $parallelGroup
-        $taskRecord.max_agents = if ($maxAgents -is [int]) { $maxAgents } else { 4 }
-    }
-
-    $dependsOnArray = @()
-    if ($dependsOn) {
-        if ($dependsOn -is [string]) {
-            if ($dependsOn -match "^\[") {
-                try {
-                    $dependsOnArray = @($dependsOn | ConvertFrom-Json)
-                } catch {
-                    $dependsOnArray = @($dependsOn -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-                }
-            } else {
-                $dependsOnArray = $dependsOn -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+            if (-not $taskType -or -not $priority -or -not $objective -or -not $agent) {
+                return [ordered]@{ ok = $false; error = "add-task requires task_type, priority, objective, agent" }
             }
-        } elseif ($dependsOn -is [array]) {
-            $dependsOnArray = @($dependsOn)
-        }
-    }
-    $taskRecord.depends_on = $dependsOnArray
 
-    $tasksPath = Get-TasksPath
-    $tasksDir = Split-Path $tasksPath
-    if (-not (Test-Path $tasksDir)) {
-        New-Item -ItemType Directory -Path $tasksDir -Force | Out-Null
-    }
+            if ($taskType -notin @("research", "coding", "verification", "memory")) {
+                return [ordered]@{ ok = $false; error = "Task type must be: research, coding, verification, or memory" }
+            }
 
-    $jsonLine = $taskRecord | ConvertTo-Json -Compress -Depth 10
-    try {
-        $jsonLine | ConvertFrom-Json | Out-Null
-        Safe-AppendToFile -Path $tasksPath -Content $jsonLine
-        Publish-Event -Type 'task.created' -Data @{ task_id = $taskId; depends_on = ,@($dependsOnArray); parallel_group = $parallelGroup }
-    } catch {
-        return [ordered]@{ ok = $false; error = "Failed to write tasks.jsonl: $($_.Exception.Message)" }
-    }
+            if ($priority -notin @("p0", "p1", "p2")) {
+                return [ordered]@{ ok = $false; error = "Priority must be: p0, p1, or p2" }
+            }
 
-    return [ordered]@{ ok = $true; task_id = $taskId }
-}
+            $arguments = @(
+                '-Type', $taskType,
+                '-Priority', $priority,
+                '-Objective', $objective,
+                '-Agent', $agent
+            )
 
-function Invoke-BatchRecordDecision {
-    param([Parameter(Mandatory=$true)][object]$Op)
+            if ($parentId) { $arguments += '-ParentId', $parentId }
+            if ($parallelGroup) { $arguments += '-ParallelGroup', $parallelGroup }
+            if ($maxAgents -and $maxAgents -is [int]) { $arguments += '-MaxAgents', $maxAgents }
+            elseif ($parallelGroup) { $arguments += '-MaxAgents', 4 }
 
-    $topic = $Op.topic
-    $choice = $Op.choice
-    $problem = $Op.problem
-    $rationale = $Op.rationale
-    $task = $Op.task_id
-    $agent = $Op.agent
-    $status = $Op.status
-
-    if (-not $topic -or -not $choice) {
-        return [ordered]@{ ok = $false; error = "record-decision requires topic and choice" }
-    }
-
-    $decisionsMdPath = Get-DecisionsMdPath
-    $decisionsJsonlPath = Get-DecisionsJsonlPath
-
-    $decisionsDir = Split-Path $decisionsMdPath
-    if (-not (Test-Path $decisionsDir)) {
-        New-Item -ItemType Directory -Path $decisionsDir -Force | Out-Null
-    }
-
-    if (-not (Test-Path $decisionsMdPath)) {
-        "# Decisions Log" | Set-Content $decisionsMdPath
-    }
-
-    if (-not (Test-Path $decisionsJsonlPath)) {
-        "" | Set-Content $decisionsJsonlPath
-    }
-
-    $date = Get-Date -Format 'yyyy-MM-dd'
-    $lineSeparator = [Environment]::NewLine
-
-    $sections = @(
-        "### $date $topic",
-        '',
-        '**Problem:**',
-        $problem,
-        '',
-        '**Solution:**',
-        "- Chosen: $choice",
-        "- Rationale: $rationale"
-    )
-
-    if ($task) {
-        $sections += '', "**Task:** $task"
-    }
-
-    $decision = ($sections -join $lineSeparator)
-    $decisionWithNewline = ($decision.TrimEnd() + ($lineSeparator * 2))
-
-    try {
-        Add-Content -Path $decisionsMdPath -Value $decisionWithNewline
-
-        $record = [ordered]@{
-            id = [System.Guid]::NewGuid().ToString("N").Substring(0,8)
-            timestamp = (Get-Date -Format "o")
-            topic = $topic
-            problem = $problem
-            choice = $choice
-            rationale = $rationale
-            task = $task
-            artifacts = ,@()
-        }
-        if ($agent) { $record.agent = $agent }
-        if ($status) { $record.status = $status }
-
-        $record | ConvertTo-Json -Compress | Add-Content -Path $decisionsJsonlPath
-    } catch {
-        return [ordered]@{ ok = $false; error = "Failed to record decision: $($_.Exception.Message)" }
-    }
-
-    $decisionId = $record.id
-    return [ordered]@{ ok = $true; id = $decisionId }
-}
-
-function Invoke-BatchUpdateTaskStatus {
-    param([Parameter(Mandatory=$true)][object]$Op)
-
-    $taskId = $Op.task_id
-    $status = $Op.status
-    $agent = $Op.agent
-    $note = $Op.note
-    $progress = $Op.progress
-
-    if (-not $taskId -or -not $status) {
-        return [ordered]@{ ok = $false; error = "update-task-status requires task_id and status" }
-    }
-
-    if ($taskId -eq 'last') {
-        $lastTask = Get-LatestTaskRecord
-        if (-not $lastTask) {
-            return [ordered]@{ ok = $false; error = "No tasks found for -task_id last" }
-        }
-        $taskId = $lastTask.task_id
-    } elseif ($taskId -eq 'current') {
-        $currentTask = Get-CurrentTaskRecord
-        if (-not $currentTask) {
-            return [ordered]@{ ok = $false; error = "No task in progress for -task_id current" }
-        }
-        $taskId = $currentTask.task_id
-    }
-
-    if ($status -notin @('pending', 'in_progress', 'completed', 'failed', 'blocked')) {
-        return [ordered]@{ ok = $false; error = 'Status must be: pending, in_progress, completed, failed, or blocked' }
-    }
-
-    $tasksPath = Get-TasksPath
-    if (-not (Test-Path $tasksPath)) {
-        return [ordered]@{ ok = $false; error = "Tasks file not found: $tasksPath" }
-    }
-
-    $script:updated = $false
-    $script:updatedTask = $null
-
-    try {
-        $null = Lock-AndUpdateJsonl -Path $tasksPath -UpdateAction {
-            param($tasks)
-
-            for ($i = 0; $i -lt $tasks.Count; $i++) {
-                if ($tasks[$i].task_id -eq $taskId) {
-                    $tasks[$i].status = $status
-                    if ($status -eq 'completed') {
-                        $completedAt = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ssZ')
-                        if ($null -eq $tasks[$i].depends_on) { $tasks[$i] | Add-Member -NotePropertyName depends_on -NotePropertyValue @() -Force }
-                        if ($null -eq $tasks[$i].estimated_complexity) { $tasks[$i] | Add-Member -NotePropertyName estimated_complexity -NotePropertyValue 'medium' -Force }
-                        $tasks[$i] | Add-Member -NotePropertyName completed_at -NotePropertyValue $completedAt -Force
-                    }
-                    if ($agent) {
-                        $tasks[$i].assigned_agent = $agent
-                    }
-                    if ($note) {
-                        $tasks[$i] | Add-Member -NotePropertyName note -NotePropertyValue $note -Force
-                    }
-                    if ($progress) {
-                        $tasks[$i] | Add-Member -NotePropertyName progress -NotePropertyValue $progress -Force
-                    }
-                    $script:updated = $true
-                    $script:updatedTask = $tasks[$i]
-                    break
+            if ($dependsOn) {
+                if ($dependsOn -is [array]) {
+                    $arguments += '-DependsOn', ($dependsOn | ConvertTo-Json -Compress)
+                } else {
+                    $arguments += '-DependsOn', $dependsOn
                 }
             }
-            return $tasks
+
+            if ($estimatedComplexity) { $arguments += '-EstimatedComplexity', $estimatedComplexity }
+
+            $arguments += '-Json'
         }
 
-        if (-not $script:updated) {
-            return [ordered]@{ ok = $false; error = "task_not_found" }
+        "record-decision" {
+            $topic = $Op.topic
+            $choice = $Op.choice
+            $problem = $Op.problem
+            $rationale = $Op.rationale
+            $task = $Op.task_id
+            $agent = $Op.agent
+            $artifacts = $Op.artifacts
+            $status = $Op.status
+
+            if (-not $topic -or -not $choice) {
+                return [ordered]@{ ok = $false; error = "record-decision requires topic and choice" }
+            }
+
+            $arguments = @(
+                '-Topic', $topic,
+                '-Choice', $choice
+            )
+
+            if ($problem) { $arguments += '-Problem', $problem }
+            if ($rationale) { $arguments += '-Rationale', $rationale }
+            if ($task) { $arguments += '-Task', $task }
+            if ($agent) { $arguments += '-Agent', $agent }
+            if ($artifacts -and $artifacts -is [array]) { $arguments += '-Artifacts', ($artifacts | ConvertTo-Json -Compress) }
+            if ($status) { $arguments += '-Status', $status }
+
+            $arguments += '-Json'
         }
+
+        "update-task-status" {
+            $taskId = $Op.task_id
+            $status = $Op.status
+            $agent = $Op.agent
+            $note = $Op.note
+            $progress = $Op.progress
+
+            if (-not $taskId -or -not $status) {
+                return [ordered]@{ ok = $false; error = "update-task-status requires task_id and status" }
+            }
+
+            if ($status -notin @('pending', 'in_progress', 'completed', 'failed', 'blocked')) {
+                return [ordered]@{ ok = $false; error = 'Status must be: pending, in_progress, completed, failed, or blocked' }
+            }
+
+            $arguments = @(
+                '-TaskId', $taskId,
+                '-Status', $status
+            )
+
+            if ($agent) { $arguments += '-Agent', $agent }
+            if ($note) { $arguments += '-Note', $note }
+            if ($progress) { $arguments += '-Progress', $progress }
+
+            $arguments += '-Json'
+        }
+
+        default {
+            return [ordered]@{ ok = $false; error = "Unknown operation type: $opType" }
+        }
+    }
+
+    try {
+        $scriptPath = Join-Path $PSScriptRoot ("{0}.ps1" -f $opType)
+        if (-not (Test-Path $scriptPath)) {
+            return [ordered]@{ ok = $false; error = "Script not found for operation type: $opType" }
+        }
+
+        $ProgressPreference = 'SilentlyContinue'
+        $output = & $scriptPath @arguments 2>&1
+
+        if ($output -is [string]) {
+            try {
+                $result = $output | ConvertFrom-Json
+                return $result
+            } catch {
+                return [ordered]@{ ok = $false; error = "Failed to parse script output as JSON: $output" }
+            }
+        } elseif ($output -is [hashtable] -or $output -is [pscustomobject]) {
+            return $output
+        }
+
+        return [ordered]@{ ok = $true }
     } catch {
-        return [ordered]@{ ok = $false; error = "Failed to update task: $($_.Exception.Message)" }
+        return [ordered]@{ ok = $false; error = $_.Exception.Message }
     }
-
-    if ($status -eq 'completed') {
-        try {
-            Publish-Event -Type 'task.completed' -Data @{ task_id = $taskId }
-        } catch {}
-    } else {
-        try {
-            Publish-Event -Type 'task.updated' -Data @{ task_id = $taskId; status = $status }
-        } catch {}
-    }
-
-    return [ordered]@{ ok = $true; task_id = $taskId; status = $status }
 }
 
-if (-not $InputFile -and -not $InputJson) {
-    Write-FailureResult -Message "Either -InputFile or -InputJson must be provided"
+if (-not $Operations) {
+    Write-FailureResult -Message "Operations JSON string is required"
 }
 
 $ops = @()
 try {
-    if ($InputJson) {
-        $ops = $InputJson | ConvertFrom-Json
-if ($ops -isnot [array]) {
-    $ops = @($ops)
-}
-    } else {
-        if (-not (Test-Path $InputFile)) {
-            Write-FailureResult -Message "InputFile not found: $InputFile"
-        }
-        $content = Get-Content -LiteralPath $InputFile -Raw
-        $ops = $content | ConvertFrom-Json
-        if ($ops -isnot [array]) {
-            $ops = @($ops)
-        }
+    $ops = $Operations | ConvertFrom-Json
+    if ($ops -isnot [array]) {
+        $ops = @($ops)
     }
 } catch {
     Write-FailureResult -Message "Failed to parse input JSON: $_"
@@ -327,7 +213,7 @@ if ($null -eq $ops -or $ops.Count -eq 0) {
 
 foreach ($op in $ops) {
     $index = $script:results.Count
-    $opType = $op.op
+    $opType = $op.type
     $result = [ordered]@{
         index = $index
         op = $opType
@@ -337,54 +223,22 @@ foreach ($op in $ops) {
     $script:results += $result
 
     try {
-        switch ($opType) {
-            "add-task" {
-                $r = Invoke-BatchAddTask -Op $op
-                $result.ok = $r.ok
-                if ($r.ok) {
-                    $result.task_id = $r.task_id
-                } else {
-                    $result.error = $r.error
-                }
+        $r = Invoke-BatchOperation -Op $op
+        $result.ok = $r.ok
+        if ($r.ok) {
+            if ($opType -eq 'add-task') { $result.task_id = $r.task_id }
+            if ($opType -eq 'record-decision') { $result.id = $r.id }
+            if ($opType -eq 'update-task-status') {
+                $result.task_id = $r.task_id
+                $result.status = $r.status
             }
-            "record-decision" {
-                $r = Invoke-BatchRecordDecision -Op $op
-                $result.ok = $r.ok
-                if ($r.ok) {
-                    $result.id = $r.id
-                } else {
-                    $result.error = $r.error
-                }
-            }
-            "update-task-status" {
-                $r = Invoke-BatchUpdateTaskStatus -Op $op
-                $result.ok = $r.ok
-                if ($r.ok) {
-                    $result.task_id = $r.task_id
-                    $result.status = $r.status
-                } else {
-                    $result.error = $r.error
-                }
-            }
-            default {
-                $result.ok = $false
-                $result.error = "Unknown operation: $opType"
-                $script:failed = $true
-                if (-not $ContinueOnError) {
-                    $script:stoppedAt = $index
-                    break
-                }
-                continue
-            }
+        } else {
+            $result.error = $r.error
         }
     } catch {
         $result.ok = $false
         $result.error = $_.Exception.Message
         $script:failed = $true
-        if (-not $ContinueOnError) {
-            $script:stoppedAt = $index
-            break
-        }
     }
 
     if (-not $result.ok -and -not $ContinueOnError) {

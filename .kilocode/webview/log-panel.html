@@ -1,0 +1,59 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Event Log</title>
+    <style>
+        body { font-family: Consolas, monospace; margin: 0; padding: 10px; background: #fafafa; color: #222; }
+        h2 { margin-top: 0; color: #333; }
+        #log { max-height: 80vh; overflow-y: auto; border: 1px solid #ccc; background: #fff; padding: 10px; border-radius: 4px; }
+        .entry { margin-bottom: 8px; padding: 6px; border-left: 3px solid #007acc; background: #f9f9f9; }
+        .type { font-weight: bold; text-transform: uppercase; font-size: 0.9em; }
+        .time { color: #666; font-size: 0.85em; margin-right: 8px; }
+        .data { white-space: pre-wrap; word-break: break-word; }
+        .error { border-left-color: #d9534f; }
+        .warn { border-left-color: #f0ad4e; }
+        .info { border-left-color: #5bc0de; }
+    </style>
+</head>
+<body>
+    <h2>Event Log (Bus)</h2>
+    <div id="log"></div>
+    <script>
+        const logDiv = document.getElementById('log');
+        const eventsPath = '/.kilocode/memory/bus/events.jsonl';
+        let lastSize = 0;
+        function loadNewLines() {
+            fetch(eventsPath)
+                .then(r => r.text())
+                .then(text => {
+                    const lines = text.trim().split('\n');
+                    if (lines.length === 0 || (lines.length === 1 && lines[0] === '')) return;
+                    const newLines = lines.slice(lastSize);
+                    lastSize = lines.length;
+                    newLines.forEach(line => {
+                        try {
+                            const event = JSON.parse(line);
+                            const div = document.createElement('div');
+                            div.className = 'entry';
+                            const type = event.type || 'unknown';
+                            div.classList.add(type.toLowerCase());
+                            const time = new Date(event.timestamp || Date.now()).toLocaleTimeString();
+                            const detail = typeof event.data !== 'undefined' ? JSON.stringify(event.data, null, 2) : JSON.stringify(event, null, 2);
+                            div.innerHTML = `<span class="time">[${time}]</span><span class="type">${type}</span><div class="data">${detail}</div>`;
+                            logDiv.appendChild(div);
+                            logDiv.scrollTop = logDiv.scrollHeight;
+                        } catch (e) {
+                            // ignore malformed lines
+                        }
+                    });
+                })
+                .catch(err => console.error('Failed to fetch event log:', err));
+        }
+        // Initial load
+        loadNewLines();
+        // Poll every 2 seconds
+        setInterval(loadNewLines, 2000);
+    </script>
+</body>
+</html>
