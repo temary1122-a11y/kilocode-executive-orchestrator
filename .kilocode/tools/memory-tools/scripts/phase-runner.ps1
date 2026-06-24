@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
 Compact 7-phase orchestrator for Executive Orchestrator.
 
@@ -1628,7 +1628,25 @@ if (-not $contextPacketPath) {
         if ($agentStatusText.Trim()) {
             Write-Host $agentStatusText
         }
-        Write-PhaseLine 'P6' 'DONE' 'Agent status snapshot captured'
+# Compress recent monitoring events for LLM consumption
+if (-not $DryRun) {
+    $compressed = & "$PSScriptRoot\Get-CompressedContext.ps1" -Count 20 -Compress
+    if ($compressed) {
+        $outPath = Join-Path $PSScriptRoot '..' 'memory' 'bus' 'events.compressed.jsonl'
+        Set-Content -Path $outPath -Value $compressed -Encoding ASCII
+        # Optional: update UI status
+        Write-OrchestratorUiStatus -TaskId $TaskId -RunId $RunId -Phase 'monitoring' -ParallelGroup '' -HealingStatus 'none' -VerificationStatus '' -TraceEnabled:$false -Summary 'Monitoring events compressed (20 latest)'
+    }
+}
+&
+if (-not $DryRun) {
+    $healResult = & "$PSScriptRoot\self-heal-enhanced.ps1" -StallCheck -Agent "*"
+    if ($healResult) {
+        # Output result as JSON? we can just log.
+        Write-Host "Self-heal suggestion: $healResult"
+    }
+}
+&
         $phases['P6'] = 'DONE'
         Write-ExecutionTrace -TaskId $TaskId -Phase 'monitoring' -Status 'done' -Data @{
             output = if ($agentStatusText) { $agentStatusText } else { '' }
@@ -1736,7 +1754,7 @@ if (-not $DryRun) {
      }
 
      $finalVerifyLabel = ($verificationStatus.ToLower())
-     Write-OrchestratorUiStatus -TaskId $TaskId -RunId $RunId -Phase 'complete' -ParallelGroup ($(if ($task.PSObject.Properties.Name -contains 'parallel_group') { [string]$task.parallel_group } else { '' })) -HealingStatus ($(if ($task.PSObject.Properties.Name -contains 'last_self_heal') { 'applied' } else { 'none' })) -VerificationStatus $finalVerifyLabel -TraceEnabled:(-not $DryRun) -Summary ("run complete · context:{0}" -f $(if ($contextPacketPath) { 'ready' } else { 'n/a' }))
+     Write-OrchestratorUiStatus -TaskId $TaskId -RunId $RunId -Phase 'complete' -ParallelGroup ($(if ($task.PSObject.Properties.Name -contains 'parallel_group') { [string]$task.parallel_group } else { '' })) -HealingStatus ($(if ($task.PSObject.Properties.Name -contains 'last_self_heal') { 'applied' } else { 'none' })) -VerificationStatus $finalVerifyLabel -TraceEnabled:(-not $DryRun) -Summary ("run complete В· context:{0}" -f $(if ($contextPacketPath) { 'ready' } else { 'n/a' }))
 
      Write-Host ''
      Write-Host 'RUN SUMMARY' -ForegroundColor Magenta
@@ -1761,3 +1779,5 @@ catch {
     Write-Host $_.Exception.Message -ForegroundColor Red
     exit 1
 }
+
+

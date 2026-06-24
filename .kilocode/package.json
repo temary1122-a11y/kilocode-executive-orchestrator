@@ -1,0 +1,33 @@
+﻿{
+    "main":  "./extension.js",
+    "contributes":  {
+                        "commands":  [
+                                         {
+                                             "title":  "Executive Orchestrator: Start Workflow",
+                                             "command":  "executiveOrchestrator.startWorkflow",
+                                             "category":  "Executive Orchestrator"
+                                         },
+                                         {
+                                             "title":  "Executive Orchestrator: Stop Workflow",
+                                             "command":  "executiveOrchestrator.stopWorkflow",
+                                             "category":  "Executive Orchestrator"
+                                         },
+                                         {
+                                             "title":  "Executive Orchestrator: View Dashboard",
+                                             "command":  "executiveOrchestrator.viewDashboard",
+                                             "category":  "Executive Orchestrator"
+                                         },
+                                         {
+                                             "title":  "Executive Orchestrator: Configure MCP Servers",
+                                             "command":  "executiveOrchestrator.configureMCP",
+                                             "category":  "Executive Orchestrator"
+                                         }
+                                     ]
+                    },
+    "dependencies":  {
+                         "@kilocode/plugin":  "7.3.45"
+                     },
+    "activationEvents":  [
+                             "onStartup"
+                         ]
+}
