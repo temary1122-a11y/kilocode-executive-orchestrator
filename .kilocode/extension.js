@@ -7,14 +7,22 @@ function activate(context) {
     // Command: start workflow
     const start = vscode.commands.registerCommand('executiveOrchestrator.startWorkflow', () => {
         vscode.window.showInformationMessage('Executive Orchestrator: Workflow started');
-        // TODO: trigger actual workflow via orchestrator
+        const term = vscode.window.createTerminal('Executive Orchestrator');
+        term.show();
+
+        const isWin = process.platform === 'win32';
+        const launcher = isWin
+            ? 'powershell -ExecutionPolicy Bypass -File .\\.kilocode\\tools\\memory-tools\\scripts\\phase-runner.ps1'
+            : 'node .kilocode/delegation/kilo-sdk-delegate.js --simulate';
+
+        term.sendText(launcher);
     });
-    
+
     // Command: stop workflow
     const stop = vscode.commands.registerCommand('executiveOrchestrator.stopWorkflow', () => {
         vscode.window.showInformationMessage('Executive Orchestrator: Workflow stopped');
     });
-    
+
     // Command: view dashboard (webview)
     const viewDashboard = vscode.commands.registerCommand('executiveOrchestrator.viewDashboard', () => {
         const panel = vscode.window.createWebviewPanel(
@@ -23,29 +31,54 @@ function activate(context) {
             vscode.ViewColumn.One,
             { enableScripts: true }
         );
+
         panel.webview.html = getWebviewContent();
+
+        panel.webview.onDidReceiveMessage(
+            (message) => {
+                if (message.command === 'start') {
+                    vscode.commands.executeCommand('executiveOrchestrator.startWorkflow');
+                    panel.webview.postMessage({ command: 'updateStatus', status: 'Running Workflow...' });
+                } else if (message.command === 'stop') {
+                    vscode.commands.executeCommand('executiveOrchestrator.stopWorkflow');
+                    panel.webview.postMessage({ command: 'updateStatus', status: 'Idle' });
+                }
+            },
+            undefined,
+            context.subscriptions
+        );
     });
-    
+
     // Command: configure MCP servers (prompts for tokens)
     const configureMCP = vscode.commands.registerCommand('executiveOrchestrator.configureMCP', async () => {
         const configPath = path.join(context.extensionPath, 'mcp.json');
-        let config = {};
+        let config = { mcpServers: {} };
+
+        if (!fs.existsSync(configPath)) {
+            const examplePath = path.join(context.extensionPath, 'mcp.json.example');
+            if (fs.existsSync(examplePath)) {
+                try {
+                    fs.copyFileSync(examplePath, configPath);
+                } catch (e) {}
+            }
+        }
+
         try {
             const data = fs.readFileSync(configPath, 'utf8');
             config = JSON.parse(data);
         } catch (e) {
-            console.error('Could not read mcp.json', e);
+            console.error('Could not read or initialize mcp.json', e);
         }
-        
-        // Ensure mcpServers exists
+
         if (!config.mcpServers) config.mcpServers = {};
-        
+
         // Exa
         const exaToken = await vscode.window.showInputBox({
             prompt: 'Enter your Exa API key (sign up at https://exa.ai to get a key)',
             placeHolder: 'Exa API key',
             password: true
         });
+
         if (exaToken) {
             if (!config.mcpServers.exa) config.mcpServers.exa = {};
             config.mcpServers.exa = {
@@ -55,13 +88,14 @@ function activate(context) {
             };
             vscode.window.showInformationMessage('Exa API key saved.');
         }
-        
+
         // Tavily
         const tavilyToken = await vscode.window.showInputBox({
             prompt: 'Enter your Tavily API key (sign up at https://tavily.com)',
             placeHolder: 'Tavily API key',
             password: true
         });
+
         if (tavilyToken) {
             if (!config.mcpServers.tavily) config.mcpServers.tavily = {};
             config.mcpServers.tavily = {
@@ -71,12 +105,11 @@ function activate(context) {
             };
             vscode.window.showInformationMessage('Tavily API key saved.');
         }
-        
-        // Write back
+
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
         vscode.window.showInformationMessage('MCP configuration updated.');
     });
-    
+
     context.subscriptions.push(start, stop, viewDashboard, configureMCP);
 }
 

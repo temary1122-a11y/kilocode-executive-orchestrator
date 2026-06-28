@@ -33,7 +33,12 @@ audit-results.yaml
 *_result.yaml
 
 # ---- .kilo/ (local/optional config, not part of public beta package) ----
-.kilo/
+# Un-ignore modern agent/rule discovery contracts so they are versioned.
+.kilo/*
+!.kilo/agents/
+!.kilo/agents/**
+!.kilo/rules/
+!.kilo/rules/**
 
 # ---- Runtime memory / history ----
 .kilocode/memory/bus/events.jsonl
@@ -109,3 +114,11 @@ log-decision.ps1
 .kilocode/tools/memory-tools/scripts/*.new
 .kilocode/tools/memory-tools/scripts/*.tempcheck
 .kilocode/tools/memory-tools/scripts/kilo-sdk-delegate.js
+
+# ---- Additional test artifacts ----
+report/
+orchestrator_test.txt
+test.txt
+timestamp.txt
+timestamp_test.txt
+**/kilo-pester-*

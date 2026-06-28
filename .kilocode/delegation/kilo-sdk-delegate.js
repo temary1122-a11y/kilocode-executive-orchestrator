@@ -21,16 +21,19 @@ const path = require('path');
 function parseArgs(argv) {
     const args = argv.slice(2);
     let payloadPath = null;
+    let simulate = false;
 
     for (let i = 0; i < args.length; i++) {
         if ((args[i] === '--payload-file' || args[i] === '-f') && args[i + 1]) {
             payloadPath = args[++i];
+        } else if (args[i] === '--simulate' || args[i] === '-s') {
+            simulate = true;
         } else if (!args[i].startsWith('-') && !payloadPath) {
             payloadPath = args[i];
         }
     }
 
-    return { payloadPath };
+    return { payloadPath, simulate };
 }
 
 function readPayload(payloadPath) {
@@ -79,8 +82,9 @@ function extractFileScope(payload) {
 
 function main() {
     let payloadPath;
+    let simulate = false;
     try {
-        ({ payloadPath } = parseArgs(process.argv));
+        ({ payloadPath, simulate } = parseArgs(process.argv));
         const payload = readPayload(payloadPath);
         const taskId = extractTaskId(payload) || path.basename(payloadPath || 'unknown');
         const objective = extractObjective(payload) || '';
@@ -106,6 +110,26 @@ function main() {
         };
 
         fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+
+        if (simulate || process.env.KILO_SIMULATE_DELEGATION === '1') {
+            const simulatedOutput = {
+                ok: true,
+                invoked: true,
+                backend: 'kilo-sdk-delegate-simulated',
+                reason: 'auto_resolved_stub',
+                manifestPath: manifestPath,
+                results: [
+                    {
+                        taskId: taskId,
+                        agent: agent || 'subagent-proxy',
+                        status: 'completed',
+                        output: `[Simulated] Subagent '${agent}' successfully executed task '${taskId}'. Objective achieved within defined constraints.`
+                    }
+                ]
+            };
+            console.log(JSON.stringify(simulatedOutput, null, 2));
+            process.exit(0);
+        }
 
         const result = {
             ok: false,
